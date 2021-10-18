@@ -1,6 +1,5 @@
 import React from "react"
 import Navigation from "./components/Navigation/Navigation.js"
-import Clarifai from "clarifai"
 import FaceRecognition from "./components/FaceRecognition/FaceRecognition"
 import Logo from "./components/Logo/Logo.js"
 import ImageLinkForm from "./components/ImageLinkForm/ImageLinkForm.js"
@@ -10,9 +9,9 @@ import Particles from "react-tsparticles"
 import Signin from "./components/Signin/Signin"
 import Register from "./components/Register/Register"
 
-const app = new Clarifai.App({
-  apiKey: "dc7c3b7ef8684391bcd249af0c897a49",
-})
+// const app = new Clarifai.App({
+//   apiKey: "9b63d7b1a1654d2e973684b2d7717f67",
+// })
 
 const particlesOptions = {
   particles: {
@@ -59,18 +58,47 @@ const particlesOptions = {
     },
   },
 }
+const initialState = {
+  input: "",
+  imageUrl: "",
+  box: {},
+  route: "signin",
+  // state to keep track of where we are on the page
+  // when app initially loads and constructor gets run route will be signin
+  isSignedIn: false,
+  user: {
+    id: "",
+    name: "",
+    email: "",
+    entries: 0,
+    joined: "",
+  },
+}
 
 class App extends React.Component {
   constructor() {
     super()
-    this.state = {
-      input: "",
-      imageUrl: "",
-      box: {},
-      route: "signin",
-      isSignedIn: false,
-    }
+    this.state = initialState
   }
+
+  loadUser = (data) => {
+    this.setState({
+      user: {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        entries: data.entries,
+        joined: data.joined,
+      },
+    })
+  }
+
+  // componentDidMount() {
+  //   fetch("http://localhost:3000/")
+  //     .then((response) => response.json())
+  //     .then(console.log)
+  //   above is same thing as .then(data => console.log(data))
+  // }
 
   // we want to call this based on inputs we get from clarifai. Call this function from response we get from API
   calculateFaceLocation = (data) => {
@@ -97,17 +125,39 @@ class App extends React.Component {
 
   onButtonSubmit = () => {
     this.setState({ imageUrl: this.state.input })
-    app.models
-      .predict(Clarifai.FACE_DETECT_MODEL, this.state.input)
-      .then((response) =>
+    fetch("https://enigmatic-caverns-09719.herokuapp.com/imageurl", {
+      method: "post",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        input: this.state.input,
+      }),
+    })
+      .then((response) => response.json())
+      // app.models
+      //   .predict(Clarifai.FACE_DETECT_MODEL, this.state.input)
+      .then((response) => {
+        if (response) {
+          fetch("https://enigmatic-caverns-09719.herokuapp.com/image", {
+            method: "put",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: this.state.user.id,
+            }),
+          })
+            .then((response) => response.json())
+            .then((count) => {
+              this.setState(Object.assign(this.state.user, { entries: count }))
+            })
+            .catch(console.log)
+        }
         this.displayFaceBox(this.calculateFaceLocation(response))
-      )
+      })
       .catch((err) => console.log(err))
   }
 
   onRouteChange = (route) => {
     if (route === "signout") {
-      this.setState({ isSignedIn: false })
+      this.setState(initialState)
     } else if (route === "home") {
       this.setState({ isSignedIn: true })
     }
@@ -123,10 +173,14 @@ class App extends React.Component {
           isSignedIn={isSignedIn}
           onRouteChange={this.onRouteChange}
         />
+        {/* if route is home then render home screen otherwise */}
         {route === "home" ? (
           <div>
             <Logo />
-            <Rank />
+            <Rank
+              name={this.state.user.name}
+              entries={this.state.user.entries}
+            />
             <ImageLinkForm
               onInputChange={this.onInputChange}
               onButtonSubmit={this.onButtonSubmit}
@@ -134,10 +188,14 @@ class App extends React.Component {
             {/* You have to write this. above because onInputChange is a property of the 'App' */}
             <FaceRecognition box={box} imageUrl={imageUrl} />
           </div>
-        ) : route === "signin" ? (
-          <Signin onRouteChange={this.onRouteChange} />
+        ) : /* if it is signin route then return signin form otherwise return register form */
+        route === "signin" ? (
+          <Signin loadUser={this.loadUser} onRouteChange={this.onRouteChange} />
         ) : (
-          <Register onRouteChange={this.onRouteChange} />
+          <Register
+            loadUser={this.loadUser}
+            onRouteChange={this.onRouteChange}
+          />
         )}
       </div>
     )
